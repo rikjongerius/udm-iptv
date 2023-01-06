@@ -12,11 +12,11 @@ the [following guide](https://github.com/basmeerman/unifi-usg-kpn).
 ## Contents
 
 1. [Global Design](#global-design)
-1. [Prerequisites](#prerequisites)
-1. [Setting up Internet Connection](#setting-up-internet-connection)
-1. [Configuring Internal LAN](#configuring-internal-lan)
-1. [Configuring Helper Tool](#configuring-helper-tool)
-1. [Troubleshooting and Known Issues](#troubleshooting-and-known-issues)
+2. [Prerequisites](#prerequisites)
+3. [Setting up Internet Connection](#setting-up-internet-connection)
+4. [Configuring Internal LAN](#configuring-internal-lan)
+5. [Configuring Helper Tool](#configuring-helper-tool)
+6. [Troubleshooting and Known Issues](#troubleshooting)
 
 ## Global Design
 
@@ -61,11 +61,8 @@ Make sure you check the following prerequisites before trying the other steps:
    [firmware version 1.11](https://community.ui.com/releases/UniFi-OS-Dream-Machines-1-11-0/eef95803-6976-499b-9169-bf6dfbbcc209). 
    If you for some reason cannot use firmware v1.11+, see [udm-kernel](https://github.com/fabianishere/udm-kernel)
    for a kernel that supports multicast routing for older firmware versions of the UDM/P.
-    - **UniFi Dream Machine Pro SE**: You need
-      [Early Access firmware 2.3.7+](https://community.ui.com/releases/UniFi-OS-Dream-Machine-SE-2-3-7/2cf1632b-bcf6-4b13-a61d-f74f1e51242c)
-      for multicast routing support.
-    - **UniFi Dream Router**: Multicast routing is supported by the default 
-      firmware.
+    - **UniFi Dream Machine SE**: You need firmware version 2.3.7+ for multicast routing support.
+    - **UniFi Dream Router**: Multicast routing is supported by the default firmware.
 2. The switches in-between the IPTV decoder and the UniFi device should have IGMP
    snooping enabled. They do not need to be from Ubiquiti necessarily.
 3. The FTTP NTU (or any other type of modem) of your ISP must be connected to
@@ -116,22 +113,9 @@ multicast IPTV traffic between WAN and LAN.
 
 ### Installation
 SSH into your machine and execute the commands below in UniFi OS (not in UbiOS).
-On the UniFi Dream Machine (Pro), use `unifi-os shell` to enter UniFi OS from
-within UbiOS.
 ```bash
-# Download udm-iptv package
-curl -O -L https://github.com/fabianishere/udm-iptv/releases/download/v2.1.3/udm-iptv_2.1.3_all.deb
-# Download a recent igmpproxy version
-curl -O -L http://ftp.debian.org/debian/pool/main/i/igmpproxy/igmpproxy_0.3-1_arm64.deb
-# Update APT sources and install dialog package for interactive install
-apt update && apt install dialog
-# Install udm-iptv and igmpproxy
-apt install ./igmpproxy_0.3-1_arm64.deb ./udm-iptv_2.1.3_all.deb
+sh -c "$(curl https://raw.githubusercontent.com/fabianishere/udm-iptv/master/install.sh -sSf)"
 ```
-
-It may be possible that `apt` reports a warning after installation (like shown below),
-but this has no effect on the installation process, so you can simply ignore it.
-> N: Download is performed unsandboxed as root as file '/root/igmpproxy_0.3-1_arm64.deb' couldn't be accessed by user '_apt'. - pkgAcquire::Run (13: Permission denied)
 
 This script will install the `udm-iptv` package onto your device.
 The installation process supports various pre-defined configuration profiles for
@@ -149,14 +133,15 @@ popular IPTV providers. Below is a list of supported IPTV providers:
 |     Init7 |   CH    | Yes                                                                                                                 |
 |       MEO |   PT    | Yes                                                                                                                 |
 |        BT |   GB    | Yes                                                                                                                 |
-|   Vivo SP |   BR    | Yes                                                                                                                 |
+|   Vivo SP |   BR    | Yes - Tested with GPON TP-Link TX-6610                                                                              |
+|  Vivo GVT |   BR    | Yes - [Manual configuration necessary](https://github.com/fabianishere/udm-iptv/issues/167#issuecomment-1244797462) |
 |   Telenor |   NO    | Yes                                                                                                                 |
 |    PostTV |   LU    | [Manual configuration necessary](https://github.com/fabianishere/udm-iptv/discussions/86#discussioncomment-2345968) |
 
 If your ISP is not supported, you may select the _Custom_ profile, which allows
 you manually configure the package to your needs. 
 We appreciate if you share the configuration so others can also benefit.
-See the [profiles](profiles/) directory for examples of existing configuration
+See the [profiles](profiles) directory for examples of existing configuration
 profiles.
 
 The package installs a service that is started during the
@@ -165,22 +150,31 @@ necessary to route IPTV traffic. After installation, the service is automaticall
 started.
 
 If you experience any issues while setting up the service, please visit the
-[Troubleshooting](#troubleshooting-and-known-issues) section.
+[Troubleshooting](#troubleshooting) section.
 
 ### Ensuring Installation across Firmware Updates
-On certain UniFi devices, such as the UniFi Dream Machine SE, you may need to
-update the device configuration to have the installation of the udm-iptv 
-package persist across firmware updates. Update `/etc/default/ubnt-dpkg-cache` 
-as follows (_only_ if it exists):
+
+To ensure your installation remains persistent across firmware updates, you may
+need to perform some manual steps which are described below.
+
+Even so, **please remember to make a backup of your configuration before a 
+firmware update**. Changes in Ubiquiti's future firmware (flashing process)
+might potentially cause your configuration to be lost.
+
+#### UniFi Dream Machine (Pro)
+Custom packages on the UniFi Dream Machine (Pro) are re-installed after a firmware
+updates, but custom configuration is lost. To ensure your configuration remains
+persistent, move the configuration file to a persistent location and create a symlink:
 
 ```bash
-sed -e '/^DPKG_CACHE_UBNT_PKGS+=" udm-iptv igmpproxy dialog"/{:a;n;ba;q}' -e '$aDPKG_CACHE_UBNT_PKGS+=" udm-iptv igmpproxy dialog"' -i /etc/default/ubnt-dpkg-cache
+mv /etc/udm-iptv.conf /mnt/persistent
+ln -sf /mnt/persistent/udm-iptv.conf /etc/udm-iptv.conf
 ```
+Make sure to re-create the symlink after a firmware upgrade.
 
-If you do not perform this step, you will need to re-install the package after a
-firmware update. Note that your configuration might be lost across firmware
-updates, as a consequence of Ubiquiti's firmware flashing process ([#49](https://github.com/fabianishere/udm-iptv/issues/49)).
-**Please make a backup of your configuration before a firmware update**.
+#### UniFi Dream Machine SE and UniFi Dream Router
+It is currently not possible to persist the installation across firmware updates
+(see #120). Your configuration should remain, so only re-installation is necessary.
 
 ### Configuration
 You can modify the configuration of the service interactively using `dpkg-reconfigure -p medium udm-iptv`.
@@ -201,14 +195,7 @@ See below for a reference of the available options to configure:
 The configuration is written to `/etc/udm-iptv.conf` (within UniFi OS).
 
 ### Upgrading
-Upgrading the installation of udm-iptv is achieved by downloading a new version
-of the package and installing it via `apt`. The service should automatically
-restart after upgrading.
-
-```bash
-curl -O -L https://github.com/fabianishere/udm-iptv/releases/download/v2.1.3/udm-iptv_2.1.3_all.deb
-apt install ./udm-iptv_2.1.3_all.deb 
-```
+To upgrade `udm-iptv`, please re-run the installation script.
 
 ### Removal
 To fully remove an `udm-iptv` installation from your UniFi device, run the follow command:
@@ -220,48 +207,20 @@ In order to remove all configuration files as well, run the following command:
 apt purge dialog igmpproxy udm-iptv
 ```
 
-## Troubleshooting and Known Issues
+## Troubleshooting
 
 Below is a non-exhaustive list of issues that might occur while getting IPTV to
 run on your UniFi device, as well as troubleshooting steps. Please check these
-instructions before reporting an issue on issue tracker.
+instructions before opening a discussion.
 
-### Debugging DHCP
-
-Use the following steps to verify whether the IPTV container is obtaining an
-IP address from the IPTV network via DHCP:
-
-1. Verify that the VLAN interface has obtained an IP address:
-   ```bash
-   $ ip -4 addr show dev iptv
-   43: iptv@eth8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default
-      inet XX.XX.XX.XX/22 brd XX.XX.XX.XX scope global iptv
-        valid_lft forever preferred_lft forever
-   ```
-2. Verify that you have obtained the routes from the DHCP server:
-   ```bash
-   $ ip route list
-   ...
-   XX.XX.XX.X/21 via XX.XX.XX.X dev iptv
-   ```
-
-### Debugging IGMP Proxy
-
-Use the following steps to debug `igmpproxy` if it is behaving strangely. 
-Make sure you are running inside UniFi OS.
-
-1. **Enabling debug logs**  
-   You can enable `igmpproxy` to report debug messages by setting `IPTV_IGMPPROXY_DEBUG`
-   to `true` in the configuration at `/etc/udm-iptv.conf` (within UniFi OS).
-   Then, restart the service as follows:
-   ```bash
-   systemctl restart udm-iptv
-   ```
-2. **Viewing debug logs**  
-   You may now view the debug logs of `igmpproxy` as follows:
-   ```bash
-   journalctl -u udm-iptv
-   ```
+1. **Check if your IPTV receiver is on the right VLAN**  
+   Your IPTV receiver might not be VLAN to which the IPTV traffic is forwarded.
+2. **Check if IPTV traffic is forwarded to the right VLAN**  
+   Make sure that you have configured `IPTV_LAN_INTERFACES` correctly to forward
+   to right interfaces (e.g., `br4` for VLAN 4).
+3. **Check if your issue has been reported already**  
+   Use the GitHub search functionality to check if your issue has already been
+   reported before.
 
 ### Getting Help or Reporting an Issue
 If your issues persist, you may seek help on our [Discussions](https://github.com/fabianishere/udm-iptv/discussions) page.
