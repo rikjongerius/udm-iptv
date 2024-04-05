@@ -4,11 +4,11 @@ on: pull_request
 
 jobs:
   build:
-    runs-on: [ubuntu-18.04]
+    runs-on: [ubuntu-20.04]
     if: ${{ !contains(github.event.head_commit.message, 'skip ci') }}
     steps:
       - name: Checkout Sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: udm-iptv
       - name: Setup Dependencies
@@ -18,7 +18,7 @@ jobs:
           cd udm-iptv
           debuild -uc -us --lintian-opts --profile debian
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           if-no-files-found: error
